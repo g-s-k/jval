@@ -22,7 +22,7 @@ jobs:
         provider: pages
         skip-cleanup: true
         github-token: $GITHUB_TOKEN
-        local-dir: examples/www/pkg
+        local-dir: target/pkg
         keep-history: true
         on:
           branch: master
