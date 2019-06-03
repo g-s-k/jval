@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::io;
 use std::ops::Range;
 use std::str::FromStr;
 
@@ -17,6 +18,7 @@ pub enum ErrorKind {
     UnexpectedToken,
     UnterminatedObject,
     UnterminatedArray,
+    TrailingComma,
 }
 
 #[derive(Debug, PartialEq)]
@@ -201,28 +203,36 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                     return Ok((Some(Json::Object(map)), more));
                 }
 
-                while let Some(((Token::StringLiteral(key), tok_len, tok_rest), more)) =
-                    rest.split_first()
-                {
-                    if let Some(((Token::Colon, _, f), even_more)) = more.split_first() {
-                        if let (Some(value), still_more) = next_value(even_more)? {
-                            map.insert(key.to_string(), value);
+                while let Some((token, more)) = rest.split_first() {
+                    match token {
+                        (Token::StringLiteral(key), tok_len, tok_rest) => {
+                            if let Some(((Token::Colon, _, f), even_more)) = more.split_first() {
+                                if let (Some(value), still_more) = next_value(even_more)? {
+                                    map.insert(key.to_string(), value);
 
-                            match still_more.split_first() {
-                                Some(((Token::Comma, _, _), please_stop)) => rest = please_stop,
-                                Some(((Token::CloseCurly, _, _), please_stop)) => {
-                                    return Ok((Some(Json::Object(map)), please_stop));
+                                    match still_more.split_first() {
+                                        Some(((Token::Comma, _, _), please_stop)) => {
+                                            rest = please_stop
+                                        }
+                                        Some(((Token::CloseCurly, _, _), please_stop)) => {
+                                            return Ok((Some(Json::Object(map)), please_stop));
+                                        }
+                                        Some(((_, l, f), _)) => {
+                                            return Err((ErrorKind::UnexpectedToken, *l, *f))
+                                        }
+                                        None => return Err((ErrorKind::UnterminatedObject, 0, *f)),
+                                    }
+                                } else {
+                                    return Err((ErrorKind::UnterminatedObject, 0, *f));
                                 }
-                                Some(((_, l, f), _)) => {
-                                    return Err((ErrorKind::UnexpectedToken, *l, *f))
-                                }
-                                None => return Err((ErrorKind::UnterminatedObject, 0, *f)),
+                            } else {
+                                return Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest));
                             }
-                        } else {
-                            return Err((ErrorKind::UnterminatedObject, 0, *f));
                         }
-                    } else {
-                        return Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest));
+                        (Token::CloseCurly, start, end) => {
+                            return Err((ErrorKind::TrailingComma, *start, *end))
+                        }
+                        _ => return Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest)),
                     }
                 }
 
@@ -250,7 +260,7 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
 
                 Err((ErrorKind::UnterminatedArray, 0, *f))
             }
-            ((_, l, f), _) => return Err((ErrorKind::UnexpectedToken, *l, *f)),
+            ((_, l, f), _) => Err((ErrorKind::UnexpectedToken, *l, *f)),
         }
     } else {
         Ok((None, tokens))
@@ -339,126 +349,127 @@ pub enum Spacing {
 }
 
 impl Json {
-    pub fn print<W: fmt::Write>(&self, spacing: &Spacing, f: &mut W) -> fmt::Result {
+    pub fn print<W: io::Write>(&self, spacing: &Spacing, f: &mut W) -> io::Result<()> {
         match spacing {
-            Spacing::None => write!(f, "{}", self),
+            Spacing::None => f.write_fmt(format_args!("{}", self)),
             Spacing::Tab => self.print_tabs(0, f),
             Spacing::Space(n) => self.print_indented(*n, 0, f),
         }
     }
 
-    fn print_indented<W: fmt::Write>(
+    fn print_indented<W: io::Write>(
         &self,
         spacing: usize,
         start: usize,
         f: &mut W,
-    ) -> fmt::Result {
+    ) -> io::Result<()> {
         match self {
-            Json::Array(a) if a.is_empty() => write!(f, "[]"),
-            Json::Array(a) if a.len() == 1 => write!(f, "[ {} ]", a[0]),
-            Json::Object(o) if o.is_empty() => write!(f, "{{}}"),
+            Json::Array(a) if a.is_empty() => f.write_fmt(format_args!("[]")),
+            Json::Array(a) if a.len() == 1 => f.write_fmt(format_args!("[ {} ]", a[0])),
+            Json::Object(o) if o.is_empty() => f.write_fmt(format_args!("{{}}")),
 
             Json::Array(a) => {
-                writeln!(f, "[")?;
+                f.write_fmt(format_args!("[\n"))?;
 
                 for (i, el) in a.iter().enumerate() {
                     for _ in 0..start + spacing {
-                        write!(f, " ",)?;
+                        f.write_fmt(format_args!(" ",))?;
                     }
 
                     el.print_indented(spacing, start + spacing, f)?;
 
                     if i != a.len() - 1 {
-                        write!(f, ",")?;
+                        f.write_fmt(format_args!(","))?;
                     }
 
                     writeln!(f)?;
                 }
 
                 for _ in 0..start {
-                    write!(f, " ",)?;
+                    f.write_fmt(format_args!(" ",))?;
                 }
-                write!(f, "]")
+                f.write_fmt(format_args!("]"))
             }
             Json::Object(o) => {
-                writeln!(f, "{{")?;
+                f.write_fmt(format_args!("{{\n"))?;
 
                 for (i, (k, v)) in o.iter().enumerate() {
                     for _ in 0..start + spacing {
-                        write!(f, " ",)?;
+                        f.write_fmt(format_args!(" ",))?;
                     }
 
-                    write!(f, "\"{}\": ", k)?;
+                    f.write_fmt(format_args!("\"{}\": ", k))?;
                     v.print_indented(spacing, start + spacing, f)?;
 
                     if i != o.len() - 1 {
-                        write!(f, ",")?;
+                        f.write_fmt(format_args!(","))?;
                     }
                     writeln!(f)?;
                 }
 
                 for _ in 0..start {
-                    write!(f, " ",)?;
+                    f.write_fmt(format_args!(" ",))?;
                 }
-                write!(f, "}}")
+                f.write_fmt(format_args!("}}"))
             }
 
-            _ => write!(f, "{}", self),
+            _ => f.write_fmt(format_args!("{}", self)),
         }
     }
 
-    fn print_tabs<W: fmt::Write>(&self, start: usize, f: &mut W) -> fmt::Result {
+    fn print_tabs<W: io::Write>(&self, start: usize, f: &mut W) -> io::Result<()> {
         match self {
-            Json::Array(a) if a.is_empty() => write!(f, "[]"),
-            Json::Array(a) if a.len() == 1 => write!(f, "[ {} ]", a[0]),
-            Json::Object(o) if o.is_empty() => write!(f, "{{}}"),
+            Json::Array(a) if a.is_empty() => f.write_fmt(format_args!("[]")),
+            Json::Array(a) if a.len() == 1 => f.write_fmt(format_args!("[ {} ]", a[0])),
+            Json::Object(o) if o.is_empty() => f.write_fmt(format_args!("{{}}")),
 
             Json::Array(a) => {
-                writeln!(f, "[")?;
+                f.write_fmt(format_args!("[\n"))?;
 
                 for (i, el) in a.iter().enumerate() {
                     for _ in 0..=start {
-                        write!(f, "\t",)?;
+                        f.write_fmt(format_args!("\t",))?;
                     }
 
                     el.print_tabs(start + 1, f)?;
 
                     if i != a.len() - 1 {
-                        write!(f, ",")?;
+                        f.write_fmt(format_args!(","))?;
                     }
 
-                    writeln!(f)?;
+                    f.write_fmt(format_args!("\n"))?;
                 }
 
                 for _ in 0..start {
-                    write!(f, "\t",)?;
+                    f.write_fmt(format_args!("\t",))?;
                 }
-                write!(f, "]")
+                f.write_fmt(format_args!("]"))
             }
             Json::Object(o) => {
-                writeln!(f, "{{")?;
+                f.write_fmt(format_args!("{{\n"))?;
 
                 for (i, (k, v)) in o.iter().enumerate() {
                     for _ in 0..=start {
-                        write!(f, "\t",)?;
+                        f.write_fmt(format_args!("\t",))?;
                     }
 
-                    write!(f, "\"{}\": ", k)?;
+                    f.write_fmt(format_args!("\"{}\": ", k))?;
                     v.print_tabs(start + 1, f)?;
 
                     if i != o.len() - 1 {
-                        write!(f, ",")?;
+                        f.write_fmt(format_args!(","))?;
                     }
-                    writeln!(f)?;
+
+                    f.write_fmt(format_args!("\n"))?;
                 }
 
                 for _ in 0..start {
-                    write!(f, "\t",)?;
+                    f.write_fmt(format_args!("\t",))?;
                 }
-                write!(f, "}}")
+                f.write_fmt(format_args!("}}"))
             }
 
-            _ => write!(f, "{}", self),
+            _ => f.write_fmt(format_args!("{}", self)),
         }
     }
 }

@@ -1,0 +1,10 @@
+[package]
+name = "cli"
+version = "0.1.0"
+authors = ["George Kaplan <george.kaplan@visionistinc.com>"]
+edition = "2018"
+
+[dependencies]
+jval = { path = "../.." }
+structopt = "0.2.17"
+termion = "1.5.2"

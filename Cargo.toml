@@ -7,4 +7,4 @@ edition = "2018"
 [dependencies]
 
 [workspace]
-members = ["examples/www"]
+members = [ "examples/cli", "examples/gtk", "examples/www" ]

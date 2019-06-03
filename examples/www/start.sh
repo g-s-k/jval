@@ -1,5 +1,7 @@
 #!/bin/sh
 
+./build.sh
+
 mkdir -p ../../target/pkg && cd ../../target/pkg && python3 -m http.server ${1:-8000} &
 PYPID=$!
 

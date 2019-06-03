@@ -20,9 +20,9 @@ pub fn validate(json: &str) -> Option<Error> {
 pub fn format_packed(json: &str) -> Option<String> {
     json.parse::<Json>()
         .map(|j: Json| {
-            let mut s = String::new();
+            let mut s = Vec::new();
             j.print(&Spacing::None, &mut s).unwrap();
-            s
+            String::from_utf8_lossy(&s).into()
         })
         .ok()
 }
@@ -31,9 +31,9 @@ pub fn format_packed(json: &str) -> Option<String> {
 pub fn format_tabs(json: &str) -> Option<String> {
     json.parse::<Json>()
         .map(|j: Json| {
-            let mut s = String::new();
+            let mut s = Vec::new();
             j.print(&Spacing::Tab, &mut s).unwrap();
-            s
+            String::from_utf8_lossy(&s).into()
         })
         .ok()
 }
@@ -42,9 +42,9 @@ pub fn format_tabs(json: &str) -> Option<String> {
 pub fn format_spaces(json: &str, spacing: usize) -> Option<String> {
     json.parse::<Json>()
         .map(|j: Json| {
-            let mut s = String::new();
+            let mut s = Vec::new();
             j.print(&Spacing::Space(spacing), &mut s).unwrap();
-            s
+            String::from_utf8_lossy(&s).into()
         })
         .ok()
 }
