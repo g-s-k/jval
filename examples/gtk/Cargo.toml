@@ -1,0 +1,10 @@
+[package]
+name = "gtk"
+version = "0.1.0"
+authors = ["George Kaplan <george.kaplan@visionistinc.com>"]
+edition = "2018"
+
+[dependencies]
+gtk = "0.6.0"
+relm = "0.16.0"
+relm-derive = "0.16.0"
