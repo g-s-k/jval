@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic)]
+
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::Range;
@@ -121,17 +123,14 @@ fn try_get_number(s: &str) -> Result<(TokenRecord, &str), Error> {
             ('-', Sign) => Sign,
             ('0', Sign) => Point,
             ('1'...'9', Sign) | ('0'...'9', Whole) => Whole,
-            ('.', Point) | ('.', Whole) => Fract,
-            ('0'...'9', Fract) => Fract,
-            ('-', ExpSign) => Exp,
-            ('+', ExpSign) => Exp,
+            ('.', Point) | ('.', Whole) | ('0'...'9', Fract) => Fract,
+            ('-', ExpSign) | ('+', ExpSign) | ('0'...'9', Exp) | ('0'...'9', ExpSign) => Exp,
             ('e', Fract)
             | ('E', Fract)
             | ('e', Point)
             | ('E', Point)
             | ('e', Whole)
             | ('E', Whole) => ExpSign,
-            ('0'...'9', Exp) | ('0'...'9', ExpSign) => Exp,
             ('-', _) | ('+', _) | ('0'...'9', _) | ('.', _) | ('e', _) | ('E', _) => {
                 return Err((ErrorKind::InvalidNumber, 1, s.len() - i))
             }
@@ -340,26 +339,31 @@ pub enum Spacing {
 }
 
 impl Json {
-    pub fn print<W: fmt::Write>(&self, spacing: Spacing, f: &mut W) -> fmt::Result {
+    pub fn print<W: fmt::Write>(&self, spacing: &Spacing, f: &mut W) -> fmt::Result {
         match spacing {
             Spacing::None => write!(f, "{}", self),
             Spacing::Tab => self.print_tabs(0, f),
-            Spacing::Space(n) => self.print_indented(n, 0, f),
+            Spacing::Space(n) => self.print_indented(*n, 0, f),
         }
     }
 
-    fn print_indented<W: fmt::Write>(&self, spacing: usize, start: usize, f: &mut W) -> fmt::Result {
+    fn print_indented<W: fmt::Write>(
+        &self,
+        spacing: usize,
+        start: usize,
+        f: &mut W,
+    ) -> fmt::Result {
         match self {
             Json::Array(a) if a.is_empty() => write!(f, "[]"),
             Json::Array(a) if a.len() == 1 => write!(f, "[ {} ]", a[0]),
             Json::Object(o) if o.is_empty() => write!(f, "{{}}"),
 
             Json::Array(a) => {
-                write!(f, "[\n")?;
+                writeln!(f, "[")?;
 
                 for (i, el) in a.iter().enumerate() {
                     for _ in 0..start + spacing {
-                        write!(f, " ", )?;
+                        write!(f, " ",)?;
                     }
 
                     el.print_indented(spacing, start + spacing, f)?;
@@ -368,20 +372,20 @@ impl Json {
                         write!(f, ",")?;
                     }
 
-                    write!(f, "\n")?;
+                    writeln!(f)?;
                 }
 
                 for _ in 0..start {
-                    write!(f, " ", )?;
+                    write!(f, " ",)?;
                 }
                 write!(f, "]")
             }
             Json::Object(o) => {
-                write!(f, "{{\n")?;
+                writeln!(f, "{{")?;
 
                 for (i, (k, v)) in o.iter().enumerate() {
                     for _ in 0..start + spacing {
-                        write!(f, " ", )?;
+                        write!(f, " ",)?;
                     }
 
                     write!(f, "\"{}\": ", k)?;
@@ -390,11 +394,11 @@ impl Json {
                     if i != o.len() - 1 {
                         write!(f, ",")?;
                     }
-                    write!(f, "\n")?;
+                    writeln!(f)?;
                 }
 
                 for _ in 0..start {
-                    write!(f, " ", )?;
+                    write!(f, " ",)?;
                 }
                 write!(f, "}}")
             }
@@ -410,11 +414,11 @@ impl Json {
             Json::Object(o) if o.is_empty() => write!(f, "{{}}"),
 
             Json::Array(a) => {
-                write!(f, "[\n")?;
+                writeln!(f, "[")?;
 
                 for (i, el) in a.iter().enumerate() {
-                    for _ in 0..start + 1 {
-                        write!(f, "\t", )?;
+                    for _ in 0..=start {
+                        write!(f, "\t",)?;
                     }
 
                     el.print_tabs(start + 1, f)?;
@@ -423,20 +427,20 @@ impl Json {
                         write!(f, ",")?;
                     }
 
-                    write!(f, "\n")?;
+                    writeln!(f)?;
                 }
 
                 for _ in 0..start {
-                    write!(f, "\t", )?;
+                    write!(f, "\t",)?;
                 }
                 write!(f, "]")
             }
             Json::Object(o) => {
-                write!(f, "{{\n")?;
+                writeln!(f, "{{")?;
 
                 for (i, (k, v)) in o.iter().enumerate() {
-                    for _ in 0..start + 1 {
-                        write!(f, "\t", )?;
+                    for _ in 0..=start {
+                        write!(f, "\t",)?;
                     }
 
                     write!(f, "\"{}\": ", k)?;
@@ -445,11 +449,11 @@ impl Json {
                     if i != o.len() - 1 {
                         write!(f, ",")?;
                     }
-                    write!(f, "\n")?;
+                    writeln!(f)?;
                 }
 
                 for _ in 0..start {
-                    write!(f, "\t", )?;
+                    write!(f, "\t",)?;
                 }
                 write!(f, "}}")
             }
