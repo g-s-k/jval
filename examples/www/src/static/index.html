@@ -12,14 +12,18 @@
   ...
 }"></textarea>
             <div class="row">
-                <span id="error-display-box"></span>
                 <span>
                     <button disabled id="goto-error-btn">Go to error</button>
+                    <span id="error-display-box"></span>
+                </span>
+                <span>
+                    <input id="format-json-spacing" type="number" min="2" step="2" value="2" />
+                    <select id="format-spacing-type">
+                        <option value="space">spaces</option>
+                        <option value="tab">tabs</option>
+                        <option value="none">none</option>
+                    </select>
                     <button disabled id="format-json-btn">Format</button>
-                    <label>
-                        spaces:&nbsp;
-                        <input type="number" disabled min="0" step="2" value="2" />
-                    </label>
                 </span>
             </div>
         </section>

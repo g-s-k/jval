@@ -36,7 +36,7 @@ fn array() {
             Json::Boolean(false),
             Json::Number(3.),
             Json::String("hello".into()),
-            Json::Object(HashMap::new())
+            Json::Object(BTreeMap::new())
         ])
     );
 }
