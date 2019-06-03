@@ -16,7 +16,7 @@ jobs:
     - rust: nightly
   include:
     - stage: build_www
-      before_script: which wasm-pack || cargo install wasm-pack
+      before_script: which wasm-pack || cargo install wasm-pack; which wasm-bindgen-cli || cargo install wasm-bindgen-cli
       script: ./examples/www/build.sh
       deploy:
         provider: pages
