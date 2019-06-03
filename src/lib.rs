@@ -203,9 +203,9 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                     return Ok((Some(Json::Object(map)), more));
                 }
 
-                while let Some((current, more)) = rest.split_first() {
-                    match current {
-                        (Token::StringLiteral(key), tok_len, tok_rest) => {
+                while let Some((token, more)) = rest.split_first() {
+                    match token {
+                        (Token::StringLiteral(key), token_len, token_rest) => {
                             if let Some(((Token::Colon, _, f), even_more)) = more.split_first() {
                                 if let (Some(value), still_more) = next_value(even_more)? {
                                     map.insert(key.to_string(), value);
@@ -226,7 +226,7 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                                     return Err((ErrorKind::UnterminatedObject, 0, *f));
                                 }
                             } else {
-                                return Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest));
+                                return Err((ErrorKind::UnexpectedToken, *token_len, *token_rest));
                             }
                         }
                         (Token::CloseCurly, start, end) => {
