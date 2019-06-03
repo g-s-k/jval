@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 use std::str::FromStr;
 
 mod json;
@@ -30,9 +31,11 @@ enum Token {
     StringLiteral(String),
 }
 
-type Error<'a> = (ErrorKind, &'a str);
+type TokenRecord = (Token, usize, usize);
+type Error = (ErrorKind, usize, usize);
 
-fn try_get_string(s: &str) -> Result<((Token, &str), &str), Error> {
+fn try_get_string(s: &str) -> Result<(TokenRecord, &str), Error> {
+    let s_len = s.len();
     let mut out = String::new();
     let mut escape = false;
     let mut unic = None;
@@ -44,7 +47,7 @@ fn try_get_string(s: &str) -> Result<((Token, &str), &str), Error> {
                 out.push(c);
                 escape = false;
             }
-            '"' if !escape => return Ok(((Token::StringLiteral(out), &s[..=i]), &s[i + 1..])),
+            '"' if !escape => return Ok(((Token::StringLiteral(out), i + 1, s_len), &s[i + 1..])),
             'b' if escape => {
                 out.push(8 as char);
                 escape = false;
@@ -83,10 +86,10 @@ fn try_get_string(s: &str) -> Result<((Token, &str), &str), Error> {
                                 out.push(uc);
                                 unic = None;
                             } else {
-                                return Err((ErrorKind::InvalidUnicode, &s[i..]));
+                                return Err((ErrorKind::InvalidUnicode, u.len(), s_len - i + 3));
                             }
                         }
-                        _ => return Err((ErrorKind::InvalidUnicode, &s[i..])),
+                        _ => return Err((ErrorKind::InvalidUnicode, u.len(), s_len - i + u.len())),
                     }
                 }
             }
@@ -94,10 +97,10 @@ fn try_get_string(s: &str) -> Result<((Token, &str), &str), Error> {
         }
     }
 
-    Err((ErrorKind::UnterminatedString, s))
+    Err((ErrorKind::UnterminatedString, s_len, s_len))
 }
 
-fn try_get_number(s: &str) -> Result<((Token, &str), &str), Error> {
+fn try_get_number(s: &str) -> Result<(TokenRecord, &str), Error> {
     enum State {
         Sign,
         Whole,
@@ -129,7 +132,7 @@ fn try_get_number(s: &str) -> Result<((Token, &str), &str), Error> {
             | ('E', Whole) => ExpSign,
             ('0'...'9', Exp) | ('0'...'9', ExpSign) => Exp,
             ('-', _) | ('+', _) | ('0'...'9', _) | ('.', _) | ('e', _) | ('E', _) => {
-                return Err((ErrorKind::InvalidNumber, &s[i..]))
+                return Err((ErrorKind::InvalidNumber, 1, s.len() - i))
             }
             _ => break,
         };
@@ -139,21 +142,25 @@ fn try_get_number(s: &str) -> Result<((Token, &str), &str), Error> {
 
     // no lookahead!
     if s[..=current].ends_with('.') {
-        return Err((ErrorKind::InvalidNumber, &s[current..]));
+        return Err((ErrorKind::InvalidNumber, 1, s.len() - current));
     }
 
     s[..=current]
         .parse()
-        .map(|n| ((Token::NumberLiteral(n), &s[..=current]), &s[current + 1..]))
-        .map_err(|_| (ErrorKind::InvalidNumber, s))
+        .map(|n| {
+            (
+                (Token::NumberLiteral(n), current + 1, s.len()),
+                &s[current + 1..],
+            )
+        })
+        .map_err(|_| (ErrorKind::InvalidNumber, s.len(), s.len()))
 }
 
-type TokenResult<'a> = Result<(Option<(Token, &'a str)>, &'a str), Error<'a>>;
+type TokenResult<'a> = Result<(Option<TokenRecord>, &'a str), Error>;
 
 fn next_token(mut s: &str) -> TokenResult {
     fn split_slice(slice: &str, idx: usize, token: Token) -> TokenResult {
-        let (head, tail) = slice.split_at(idx);
-        Ok((Some((token, head)), tail))
+        Ok((Some((token, idx, slice.len())), &slice[idx..]))
     }
 
     s = s.trim_start();
@@ -177,50 +184,54 @@ fn next_token(mut s: &str) -> TokenResult {
     }
 }
 
-type ValueResult<'a> = Result<(Option<Json>, &'a [(Token, &'a str)]), Error<'a>>;
-
-fn next_value<'a>(tokens: &'a [(Token, &str)]) -> ValueResult<'a> {
+fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), Error> {
     if let Some(tup) = tokens.split_first() {
         match tup {
-            ((Token::Null, _), rest) => Ok((Some(Json::Null), rest)),
-            ((Token::True, _), rest) => Ok((Some(Json::Boolean(true)), rest)),
-            ((Token::False, _), rest) => Ok((Some(Json::Boolean(false)), rest)),
-            ((Token::NumberLiteral(n), _), rest) => Ok((Some(Json::Number(*n)), rest)),
-            ((Token::StringLiteral(n), _), rest) => Ok((Some(Json::String(n.to_string())), rest)),
-            ((Token::OpenCurly, tok_str), mut rest) => {
+            ((Token::Null, _, _), rest) => Ok((Some(Json::Null), rest)),
+            ((Token::True, _, _), rest) => Ok((Some(Json::Boolean(true)), rest)),
+            ((Token::False, _, _), rest) => Ok((Some(Json::Boolean(false)), rest)),
+            ((Token::NumberLiteral(n), _, _), rest) => Ok((Some(Json::Number(*n)), rest)),
+            ((Token::StringLiteral(n), _, _), rest) => {
+                Ok((Some(Json::String(n.to_string())), rest))
+            }
+            ((Token::OpenCurly, tok_len, tok_rest), mut rest) => {
                 let mut map = HashMap::new();
 
-                if let Some(((Token::CloseCurly, _), more)) = rest.split_first() {
+                if let Some(((Token::CloseCurly, _, _), more)) = rest.split_first() {
                     return Ok((Some(Json::Object(map)), more));
                 }
 
-                while let Some(((Token::StringLiteral(key), tok_str), more)) = rest.split_first() {
-                    if let Some(((Token::Colon, _), even_more)) = more.split_first() {
+                while let Some(((Token::StringLiteral(key), tok_len, tok_rest), more)) =
+                    rest.split_first()
+                {
+                    if let Some(((Token::Colon, _, f), even_more)) = more.split_first() {
                         if let (Some(value), still_more) = next_value(even_more)? {
                             map.insert(key.to_string(), value);
 
                             match still_more.split_first() {
-                                Some(((Token::Comma, _), please_stop)) => rest = please_stop,
-                                Some(((Token::CloseCurly, _), please_stop)) => {
+                                Some(((Token::Comma, _, _), please_stop)) => rest = please_stop,
+                                Some(((Token::CloseCurly, _, _), please_stop)) => {
                                     return Ok((Some(Json::Object(map)), please_stop));
                                 }
-                                Some(((_, s), _)) => return Err((ErrorKind::UnexpectedToken, s)),
-                                None => return Err((ErrorKind::UnterminatedObject, "")),
+                                Some(((_, l, f), _)) => {
+                                    return Err((ErrorKind::UnexpectedToken, *l, *f))
+                                }
+                                None => return Err((ErrorKind::UnterminatedObject, 0, *f)),
                             }
                         } else {
-                            return Err((ErrorKind::UnterminatedObject, ""));
+                            return Err((ErrorKind::UnterminatedObject, 0, *f));
                         }
                     } else {
-                        return Err((ErrorKind::UnexpectedToken, tok_str));
+                        return Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest));
                     }
                 }
 
-                Err((ErrorKind::UnexpectedToken, tok_str))
+                Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest))
             }
-            ((Token::OpenSquare, _), mut rest) => {
+            ((Token::OpenSquare, _, f), mut rest) => {
                 let mut vec = Vec::new();
 
-                if let Some(((Token::CloseSquare, _), more)) = rest.split_first() {
+                if let Some(((Token::CloseSquare, _, _), more)) = rest.split_first() {
                     return Ok((Some(Json::Array(vec)), more));
                 }
 
@@ -228,18 +239,18 @@ fn next_value<'a>(tokens: &'a [(Token, &str)]) -> ValueResult<'a> {
                     vec.push(value);
 
                     match more.split_first() {
-                        Some(((Token::Comma, _), even_more)) => rest = even_more,
-                        Some(((Token::CloseSquare, _), even_more)) => {
+                        Some(((Token::Comma, _, _), even_more)) => rest = even_more,
+                        Some(((Token::CloseSquare, _, _), even_more)) => {
                             return Ok((Some(Json::Array(vec)), even_more))
                         }
-                        Some(((_, s), _)) => return Err((ErrorKind::UnexpectedToken, s)),
-                        None => return Err((ErrorKind::UnterminatedArray, "")),
+                        Some(((_, l, f), _)) => return Err((ErrorKind::UnexpectedToken, *l, *f)),
+                        None => return Err((ErrorKind::UnterminatedArray, 0, *f)),
                     }
                 }
 
-                Err((ErrorKind::UnterminatedArray, ""))
+                Err((ErrorKind::UnterminatedArray, 0, *f))
             }
-            ((_, s), _) => return Err((ErrorKind::UnexpectedToken, s)),
+            ((_, l, f), _) => return Err((ErrorKind::UnexpectedToken, *l, *f)),
         }
     } else {
         Ok((None, tokens))
@@ -257,12 +268,23 @@ pub enum Json {
 }
 
 impl FromStr for Json {
-    type Err = (ErrorKind, String);
+    type Err = (ErrorKind, Range<usize>);
 
     fn from_str(mut s: &str) -> Result<Self, Self::Err> {
+        let s_len = s.len();
+        let calc_range = |(e, l, f)| {
+            (
+                e,
+                Range {
+                    start: s_len - f,
+                    end: s_len - f + l,
+                },
+            )
+        };
+
         let mut tokens = Vec::new();
 
-        while let (Some(t), s_) = next_token(s).map_err(|(e, s)| (e, s.into()))? {
+        while let (Some(t), s_) = next_token(s).map_err(calc_range)? {
             tokens.push(t);
             s = s_;
         }
@@ -270,7 +292,7 @@ impl FromStr for Json {
         let mut toks = &tokens[..];
         let mut values = Vec::new();
 
-        while let (Some(v), t_) = next_value(toks).map_err(|(e, s)| (e, s.into()))? {
+        while let (Some(v), t_) = next_value(toks).map_err(calc_range)? {
             values.push(v);
             toks = t_;
         }
@@ -278,7 +300,7 @@ impl FromStr for Json {
         if values.len() == 1 {
             Ok(values.remove(0))
         } else {
-            Err((ErrorKind::UnexpectedToken, s.into()))
+            Err(calc_range((ErrorKind::UnexpectedToken, s.len(), s.len())))
         }
     }
 }

@@ -43,7 +43,7 @@ fn trailing_content() {
         try_get_string("\"foo\" bar baz ok there is more stuff here after the closing quote")
             .unwrap(),
         (
-            (Token::StringLiteral("foo".to_string()), "\"foo\""),
+            (Token::StringLiteral("foo".to_string()), 5, 65),
             " bar baz ok there is more stuff here after the closing quote"
         )
     );
