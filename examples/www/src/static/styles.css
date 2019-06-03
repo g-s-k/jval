@@ -3,6 +3,12 @@ html, body {
   margin: 0;
 }
 
+body {
+  font-family: Helvetica, Arial, "sans-serif";
+  background: #333;
+  color: #eee;
+}
+
 body, section {
   display: flex;
   flex-direction: column;
