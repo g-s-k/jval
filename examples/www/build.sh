@@ -1,7 +1,9 @@
 #!/bin/sh
 
-wasm-pack build --target web --no-typescript
+DIRNAME=$(dirname "$0")
 
-rm -v pkg/package.json
+wasm-pack build --target web --no-typescript "$DIRNAME"
 
-cp -v src/static/* pkg
+rm -v "$DIRNAME/pkg/package.json"
+
+cp -v "$DIRNAME"/src/static/* "$DIRNAME/pkg"
