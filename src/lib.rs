@@ -203,8 +203,8 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                     return Ok((Some(Json::Object(map)), more));
                 }
 
-                while let Some((token, more)) = rest.split_first() {
-                    match token {
+                while let Some((current, more)) = rest.split_first() {
+                    match current {
                         (Token::StringLiteral(key), tok_len, tok_rest) => {
                             if let Some(((Token::Colon, _, f), even_more)) = more.split_first() {
                                 if let (Some(value), still_more) = next_value(even_more)? {
