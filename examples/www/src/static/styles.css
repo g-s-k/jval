@@ -1,0 +1,31 @@
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body, section {
+  display: flex;
+  flex-direction: column;
+}
+
+header, footer {
+  text-align: center;
+  padding: 0.5em 0;
+}
+
+section {
+  margin: 2em;
+  flex: 1;
+}
+
+textarea {
+  flex: 1;
+  resize: none;
+  margin: 0.5em 0;
+  padding: 0.5em;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+}

@@ -1,0 +1,12 @@
+[package]
+name = "www"
+version = "0.1.0"
+authors = ["George Kaplan <george@georgekaplan.xyz>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jval = { path = "../.." }
+wasm-bindgen = "0.2.45"
