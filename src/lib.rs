@@ -186,7 +186,7 @@ fn next_token(mut s: &str) -> TokenResult {
     }
 }
 
-fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), Error> {
+fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), (Error, &[TokenRecord])> {
     if let Some(tup) = tokens.split_first() {
         match tup {
             ((Token::Null, _, _), rest) => Ok((Some(Json::Null), rest)),
@@ -203,40 +203,58 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                     return Ok((Some(Json::Object(map)), more));
                 }
 
+                let mut last_comma = (tok_len, tok_rest);
                 while let Some((token, more)) = rest.split_first() {
                     match token {
                         (Token::StringLiteral(key), token_len, token_rest) => {
                             if let Some(((Token::Colon, _, f), even_more)) = more.split_first() {
-                                if let (Some(value), still_more) = next_value(even_more)? {
-                                    map.insert(key.to_string(), value);
+                                match next_value(even_more) {
+                                    Err((e, mut still_more)) => {
+                                        // find closing curly brace
+                                        while let Some((head, tail)) = still_more.split_first() {
+                                            if let (Token::CloseCurly, _, _) = head {
+                                                return Err((e, tail));
+                                            }
 
-                                    match still_more.split_first() {
-                                        Some(((Token::Comma, _, _), please_stop)) => {
-                                            rest = please_stop
+                                            still_more = tail;
                                         }
-                                        Some(((Token::CloseCurly, _, _), please_stop)) => {
-                                            return Ok((Some(Json::Object(map)), please_stop));
-                                        }
-                                        Some(((_, l, f), _)) => {
-                                            return Err((ErrorKind::UnexpectedToken, *l, *f))
-                                        }
-                                        None => return Err((ErrorKind::UnterminatedObject, 0, *f)),
+
+                                        // if it's not there, return no more tokens to continue
+                                        return Err((e, &[]));
                                     }
-                                } else {
-                                    return Err((ErrorKind::UnterminatedObject, 0, *f));
+                                    Ok((Some(value), still_more)) => {
+                                        map.insert(key.to_string(), value);
+
+                                        match still_more.split_first() {
+                                            Some(((Token::Comma, comma_len, comma_start), please_stop)) => {
+                                                last_comma = (comma_len, comma_start);
+                                                rest = please_stop
+                                            }
+                                            Some(((Token::CloseCurly, _, _), please_stop)) => {
+                                                return Ok((Some(Json::Object(map)), please_stop));
+                                            }
+                                            Some(((_, l, f), more_rest)) => {
+                                                return Err(((ErrorKind::UnexpectedToken, *l, *f), more_rest))
+                                            }
+                                            None => return Err(((ErrorKind::UnterminatedObject, 0, *f), still_more)),
+                                        }
+                                    }
+                                    Ok((None, still_more)) => {
+                                        return Err(((ErrorKind::UnterminatedObject, 0, *f), still_more));
+                                    }
                                 }
                             } else {
-                                return Err((ErrorKind::UnexpectedToken, *token_len, *token_rest));
+                                return Err(((ErrorKind::UnexpectedToken, *token_len, *token_rest), more));
                             }
                         }
-                        (Token::CloseCurly, start, end) => {
-                            return Err((ErrorKind::TrailingComma, *start, *end))
+                        (Token::CloseCurly, _, _) => {
+                            return Err(((ErrorKind::TrailingComma, *last_comma.0, *last_comma.1), more))
                         }
-                        _ => return Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest)),
+                        _ => return Err(((ErrorKind::UnexpectedToken, *tok_len, *tok_rest), rest)),
                     }
                 }
 
-                Err((ErrorKind::UnexpectedToken, *tok_len, *tok_rest))
+                Err(((ErrorKind::UnexpectedToken, *tok_len, *tok_rest), rest))
             }
             ((Token::OpenSquare, _, f), mut rest) => {
                 let mut vec = Vec::new();
@@ -245,22 +263,42 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                     return Ok((Some(Json::Array(vec)), more));
                 }
 
-                while let (Some(value), more) = next_value(rest)? {
-                    vec.push(value);
+                while !rest.is_empty() {
+                    match next_value(rest) {
+                        Err((e, mut more)) => {
+                            // find closing square brace
+                            while let Some((head, tail)) = more.split_first() {
+                                if let (Token::CloseSquare, _, _) = head {
+                                    return Err((e, tail));
+                                }
 
-                    match more.split_first() {
-                        Some(((Token::Comma, _, _), even_more)) => rest = even_more,
-                        Some(((Token::CloseSquare, _, _), even_more)) => {
-                            return Ok((Some(Json::Array(vec)), even_more))
+                                more = tail;
+                            }
+
+                            // if it's not there, return no more tokens to continue
+                            return Err((e, &[]));
                         }
-                        Some(((_, l, f), _)) => return Err((ErrorKind::UnexpectedToken, *l, *f)),
-                        None => return Err((ErrorKind::UnterminatedArray, 0, *f)),
+                        Ok((Some(value), more)) => {
+                            vec.push(value);
+
+                            match more.split_first() {
+                                Some(((Token::Comma, _, _), even_more)) => rest = even_more,
+                                Some(((Token::CloseSquare, _, _), even_more)) => {
+                                    return Ok((Some(Json::Array(vec)), even_more))
+                                }
+                                Some(((_, l, f), even_more)) => return Err(((ErrorKind::UnexpectedToken, *l, *f), even_more)),
+                                None => return Err(((ErrorKind::UnterminatedArray, 0, *f), more)),
+                            }
+                        }
+                        Ok((None, more)) => {
+                            return Err(((ErrorKind::UnterminatedArray, 0, *f), more));
+                        }
                     }
                 }
 
-                Err((ErrorKind::UnterminatedArray, 0, *f))
+                Err(((ErrorKind::UnterminatedArray, 0, *f), rest))
             }
-            ((_, l, f), _) => Err((ErrorKind::UnexpectedToken, *l, *f)),
+            ((_, l, f), rest) => Err(((ErrorKind::UnexpectedToken, *l, *f), rest)),
         }
     } else {
         Ok((None, tokens))
@@ -278,7 +316,7 @@ pub enum Json {
 }
 
 impl FromStr for Json {
-    type Err = (ErrorKind, Range<usize>);
+    type Err = Vec<(ErrorKind, Range<usize>)>;
 
     fn from_str(mut s: &str) -> Result<Self, Self::Err> {
         let s_len = s.len();
@@ -293,24 +331,55 @@ impl FromStr for Json {
         };
 
         let mut tokens = Vec::new();
+        let mut errvec = Vec::new();
 
-        while let (Some(t), s_) = next_token(s).map_err(calc_range)? {
-            tokens.push(t);
-            s = s_;
+        while !s.is_empty() {
+            match next_token(s) {
+                Err(e) => {
+                    s = &s[s.len() - e.2 + e.1..];
+                    errvec.push(calc_range(e));
+                }
+                Ok((Some(t), s_)) => {
+                    tokens.push(t);
+                    s = s_;
+                }
+                Ok((None, _)) => break,
+            }
+        }
+
+        if !errvec.is_empty() {
+            return Err(errvec);
         }
 
         let mut toks = &tokens[..];
         let mut values = Vec::new();
 
-        while let (Some(v), t_) = next_value(toks).map_err(calc_range)? {
-            values.push(v);
-            toks = t_;
+        while !toks.is_empty() {
+            match next_value(toks) {
+                Err((e, t_)) => {
+                    errvec.push(calc_range(e));
+                    toks = t_;
+                }
+                Ok((Some(v), t_)) => {
+                    values.push(v);
+                    toks = t_;
+                }
+                Ok((None, _)) => break,
+            }
+        }
+
+        if !errvec.is_empty() {
+            return Err(errvec);
         }
 
         if values.len() == 1 {
             Ok(values.remove(0))
         } else {
-            Err(calc_range((ErrorKind::UnexpectedToken, s.len(), s.len())))
+            Err(vec![calc_range((
+                ErrorKind::UnexpectedToken,
+                s.len(),
+                s.len(),
+            ))])
         }
     }
 }

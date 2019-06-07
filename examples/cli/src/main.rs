@@ -68,31 +68,31 @@ fn main() -> Result<(), Error> {
 
     let parsed = match json.parse::<Json>() {
         Ok(data) => data,
-        Err((kind, Range { start, end })) => {
-            eprintln!(
-                "Encountered error while parsing JSON: {:?} from position {} to {}.",
-                kind, start, end
-            );
+        Err(errvec) => {
+            eprintln!("Encountered {} error(s) while parsing JSON:", errvec.len());
+            for (kind, Range { start, end }) in errvec {
+                eprintln!("\n{:?} from position {} to {}.", kind, start, end);
 
-            let range_start = json[..start]
-                .rmatch_indices('\n')
-                .map(|(n, _)| n + 1)
-                .nth(2)
-                .unwrap_or_default();
-            let range_end = json[end..]
-                .match_indices('\n')
-                .map(|(n, _)| n + end)
-                .nth(2)
-                .unwrap_or(json.len());
-            eprintln!(
-                "\t{}{red}{white}{}{reset}{}",
-                &json[range_start..start],
-                &json[start..end],
-                &json[end..range_end].trim_end(),
-                red = Bg(color::Red),
-                white = Fg(color::LightWhite),
-                reset = style::Reset
-            );
+                let range_start = json[..start]
+                    .rmatch_indices('\n')
+                    .map(|(n, _)| n + 1)
+                    .nth(2)
+                    .unwrap_or_default();
+                let range_end = json[end..]
+                    .match_indices('\n')
+                    .map(|(n, _)| n + end)
+                    .nth(2)
+                    .unwrap_or(json.len());
+                eprintln!(
+                    "{}{red}{white}{}{reset}{}",
+                    &json[range_start..start],
+                    &json[start..end],
+                    &json[end..range_end].trim_end(),
+                    red = Bg(color::Red),
+                    white = Fg(color::LightWhite),
+                    reset = style::Reset
+                );
+            }
             std::process::exit(1);
         }
     };

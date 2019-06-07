@@ -12,7 +12,10 @@ pub struct Error {
 #[wasm_bindgen]
 pub fn validate(json: &str) -> Option<Error> {
     json.parse::<Json>()
-        .map_err(|(_, Range { start, end })| Error { start, end })
+        .map_err(|mut errvec| {
+            let (_, Range { start, end }) = errvec.remove(0);
+            Error { start, end }
+        })
         .err()
 }
 
