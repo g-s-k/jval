@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 DIRNAME=$(realpath $(dirname "$0"))
 OUTDIR=$(realpath "$DIRNAME/../../target/pkg")
 
