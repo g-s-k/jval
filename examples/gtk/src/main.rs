@@ -1,12 +1,15 @@
 use gtk::prelude::*;
-use gtk::{Window, WindowType};
+use gtk::{
+    Adjustment, Button, ComboBoxText, Grid, ScrolledWindow, TextBuffer, TextView, Window,
+    WindowType,
+};
 use relm::{connect, connect_stream, Relm, Update, Widget};
 use relm_derive::Msg;
 
-use jval::Spacing;
+use jval::{Json, Spacing};
 
 struct Model {
-    text: String,
+    json: Option<Json>,
 }
 
 #[derive(Msg)]
@@ -18,8 +21,10 @@ enum Msg {
 
 #[derive(Clone)]
 struct Widgets {
-    fmt_choose: gtk::ComboBoxText,
-    text_buf: gtk::TextBuffer,
+    err_btn: Button,
+    fmt_btn: Button,
+    fmt_choose: ComboBoxText,
+    text_buf: TextBuffer,
     window: Window,
 }
 
@@ -28,46 +33,68 @@ struct Win {
     widgets: Widgets,
 }
 
+impl Win {
+    fn get_text(&self) -> Option<String> {
+        let (start, end) = self.widgets.text_buf.get_bounds();
+        if let Some(text) = self.widgets.text_buf.get_text(&start, &end, true) {
+            Some(text.into())
+        } else {
+            None
+        }
+    }
+}
+
 impl Update for Win {
     type Model = Model;
     type ModelParam = ();
     type Msg = Msg;
 
     fn model(_: &Relm<Self>, _: ()) -> Model {
-        Model {
-            text: String::new(),
-        }
+        Model { json: None }
     }
 
     fn update(&mut self, event: Msg) {
         match event {
             Msg::DoFmt => {
-                let spacing = match self
-                    .widgets
-                    .fmt_choose
-                    .get_active_text()
-                    .expect("spacing should never be unselected")
-                    .as_ref()
-                {
-                    "none" => Spacing::None,
-                    "4 spaces" => Spacing::Space(4),
-                    "2 spaces" => Spacing::Space(2),
-                    "tabs" => Spacing::Tab,
-                    _ => unreachable!(),
-                };
+                if let Some(json) = &self.model.json {
+                    let spacing = match self
+                        .widgets
+                        .fmt_choose
+                        .get_active_text()
+                        .expect("spacing should never be unselected")
+                        .as_ref()
+                    {
+                        "none" => Spacing::None,
+                        "8 spaces" => Spacing::Space(8),
+                        "4 spaces" => Spacing::Space(4),
+                        "2 spaces" => Spacing::Space(2),
+                        "tabs" => Spacing::Tab,
+                        _ => unreachable!(),
+                    };
 
-                let json: jval::Json = self.model.text.parse().unwrap();
-                let mut buf = Vec::with_capacity(self.model.text.len());
-                json.print(&spacing, &mut buf).unwrap();
-                self.model.text = String::from_utf8_lossy(&buf).into();
-                self.widgets.text_buf.set_text(&self.model.text);
-            }
-            Msg::Text => {
-                let (start, end) = self.widgets.text_buf.get_bounds();
-                if let Some(text) = self.widgets.text_buf.get_text(&start, &end, true) {
-                    self.model.text = text.into();
+                    let mut buf = Vec::new();
+                    json.print(&spacing, &mut buf)
+                        .expect("was valid JSON, but could not print it");
+                    self.widgets
+                        .text_buf
+                        .set_text(&String::from_utf8_lossy(&buf));
                 }
             }
+
+            Msg::Text => {
+                if let Some(text) = self.get_text() {
+                    if let Ok(json) = text.parse::<Json>() {
+                        self.model.json = Some(json);
+                        self.widgets.err_btn.set_sensitive(false);
+                        self.widgets.fmt_btn.set_sensitive(true);
+                    } else {
+                        self.model.json = None;
+                        self.widgets.err_btn.set_sensitive(!text.trim().is_empty());
+                        self.widgets.fmt_btn.set_sensitive(false);
+                    }
+                }
+            }
+
             Msg::Quit => gtk::main_quit(),
         }
     }
@@ -81,7 +108,7 @@ impl Widget for Win {
     }
 
     fn view(relm: &Relm<Self>, model: Self::Model) -> Self {
-        let textview = gtk::TextView::new();
+        let textview = TextView::new();
         textview.set_editable(true);
         textview.set_monospace(true);
         let text_buf = textview
@@ -89,17 +116,18 @@ impl Widget for Win {
             .expect("text view does not have a buffer");
         connect!(relm, text_buf, connect_changed(_), Msg::Text);
 
-        let scroller = gtk::ScrolledWindow::new(
-            Some(&gtk::Adjustment::new(1., 0., 0., 0., 0., 0.)),
-            Some(&gtk::Adjustment::new(1., 0., 0., 0., 0., 0.)),
+        let scroller = ScrolledWindow::new(
+            Some(&Adjustment::new(1., 0., 0., 0., 0., 0.)),
+            Some(&Adjustment::new(1., 0., 0., 0., 0., 0.)),
         );
         scroller.set_hexpand(true);
         scroller.set_vexpand(true);
         scroller.add(&textview);
 
-        let next_err = gtk::Button::new_with_label("Go to next error");
+        let err_btn = Button::new_with_label("Go to next error");
+        err_btn.set_sensitive(false);
 
-        let fmt_choose = gtk::ComboBoxText::new();
+        let fmt_choose = ComboBoxText::new();
         fmt_choose.append_text("none");
         fmt_choose.append_text("2 spaces");
         fmt_choose.append(Some("4"), "4 spaces");
@@ -107,14 +135,15 @@ impl Widget for Win {
         fmt_choose.append_text("tabs");
         fmt_choose.set_active_id(Some("4"));
 
-        let do_fmt = gtk::Button::new_with_label("Format");
-        connect!(relm, do_fmt, connect_clicked(_), Msg::DoFmt);
+        let fmt_btn = Button::new_with_label("Format");
+        fmt_btn.set_sensitive(false);
+        connect!(relm, fmt_btn, connect_clicked(_), Msg::DoFmt);
 
-        let grd = gtk::Grid::new();
+        let grd = Grid::new();
         grd.attach(&scroller, 0, 0, 10, 5);
-        grd.attach(&next_err, 0, 6, 1, 1);
+        grd.attach(&err_btn, 0, 6, 1, 1);
         grd.attach(&fmt_choose, 7, 6, 2, 1);
-        grd.attach(&do_fmt, 9, 6, 1, 1);
+        grd.attach(&fmt_btn, 9, 6, 1, 1);
 
         let window = Window::new(WindowType::Toplevel);
         window.set_title("JSON Validator");
@@ -135,9 +164,11 @@ impl Widget for Win {
         Win {
             model,
             widgets: Widgets {
-                window,
+                err_btn,
+                fmt_btn,
                 fmt_choose,
                 text_buf,
+                window,
             },
         }
     }
