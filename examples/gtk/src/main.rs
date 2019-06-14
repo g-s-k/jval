@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use gtk::prelude::*;
 use gtk::{
     Adjustment, Button, ComboBoxText, Grid, ScrolledWindow, TextBuffer, TextView, Window,
@@ -9,11 +11,13 @@ use relm_derive::Msg;
 use jval::{Json, Spacing};
 
 struct Model {
+    errs: Vec<Range<usize>>,
     json: Option<Json>,
 }
 
 #[derive(Msg)]
 enum Msg {
+    NextErr,
     DoFmt,
     Text,
     Quit,
@@ -25,6 +29,7 @@ struct Widgets {
     fmt_btn: Button,
     fmt_choose: ComboBoxText,
     text_buf: TextBuffer,
+    text_view: TextView,
     window: Window,
 }
 
@@ -50,11 +55,24 @@ impl Update for Win {
     type Msg = Msg;
 
     fn model(_: &Relm<Self>, _: ()) -> Model {
-        Model { json: None }
+        Model {
+            errs: Vec::new(),
+            json: None,
+        }
     }
 
     fn update(&mut self, event: Msg) {
         match event {
+            Msg::NextErr => {
+                if let Some((Range { start, end }, _)) = self.model.errs.split_first() {
+                    let (mut buf_start, mut buf_end) = self.widgets.text_buf.get_bounds();
+                    buf_start.set_offset(*start as i32);
+                    buf_end.set_offset(*end as i32);
+                    self.widgets.text_buf.select_range(&buf_start, &buf_end);
+                    self.widgets.text_view.grab_focus();
+                }
+            }
+
             Msg::DoFmt => {
                 if let Some(json) = &self.model.json {
                     let spacing = match self
@@ -78,19 +96,27 @@ impl Update for Win {
                     self.widgets
                         .text_buf
                         .set_text(&String::from_utf8_lossy(&buf));
+                    self.widgets.text_view.grab_focus();
                 }
             }
 
             Msg::Text => {
                 if let Some(text) = self.get_text() {
-                    if let Ok(json) = text.parse::<Json>() {
-                        self.model.json = Some(json);
-                        self.widgets.err_btn.set_sensitive(false);
-                        self.widgets.fmt_btn.set_sensitive(true);
-                    } else {
-                        self.model.json = None;
-                        self.widgets.err_btn.set_sensitive(!text.trim().is_empty());
-                        self.widgets.fmt_btn.set_sensitive(false);
+                    match text.parse::<Json>() {
+                        Ok(json) => {
+                            self.model.errs = Vec::new();
+                            self.model.json = Some(json);
+
+                            self.widgets.err_btn.set_sensitive(false);
+                            self.widgets.fmt_btn.set_sensitive(true);
+                        }
+                        Err(v) => {
+                            self.model.errs = v.into_iter().map(|(_, r)| r).collect();
+                            self.model.json = None;
+
+                            self.widgets.err_btn.set_sensitive(!text.trim().is_empty());
+                            self.widgets.fmt_btn.set_sensitive(false);
+                        }
                     }
                 }
             }
@@ -108,10 +134,10 @@ impl Widget for Win {
     }
 
     fn view(relm: &Relm<Self>, model: Self::Model) -> Self {
-        let textview = TextView::new();
-        textview.set_editable(true);
-        textview.set_monospace(true);
-        let text_buf = textview
+        let text_view = TextView::new();
+        text_view.set_editable(true);
+        text_view.set_monospace(true);
+        let text_buf = text_view
             .get_buffer()
             .expect("text view does not have a buffer");
         connect!(relm, text_buf, connect_changed(_), Msg::Text);
@@ -122,10 +148,11 @@ impl Widget for Win {
         );
         scroller.set_hexpand(true);
         scroller.set_vexpand(true);
-        scroller.add(&textview);
+        scroller.add(&text_view);
 
         let err_btn = Button::new_with_label("Go to next error");
         err_btn.set_sensitive(false);
+        connect!(relm, err_btn, connect_clicked(_), Msg::NextErr);
 
         let fmt_choose = ComboBoxText::new();
         fmt_choose.append_text("none");
@@ -168,6 +195,7 @@ impl Widget for Win {
                 fmt_btn,
                 fmt_choose,
                 text_buf,
+                text_view,
                 window,
             },
         }
