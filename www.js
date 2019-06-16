@@ -1,5 +1,4 @@
 
-const __exports = {};
 let wasm;
 
 let WASM_VECTOR_LEN = 0;
@@ -87,7 +86,6 @@ export function validate(json) {
     }
 
 }
-__exports.validate = validate
 
 let cachedTextDecoder = new TextDecoder('utf-8');
 
@@ -135,7 +133,6 @@ export function format_packed(json) {
     }
 
 }
-__exports.format_packed = format_packed
 
 /**
 * @param {string} json
@@ -162,7 +159,6 @@ export function format_tabs(json) {
     }
 
 }
-__exports.format_tabs = format_tabs
 
 /**
 * @param {string} json
@@ -190,17 +186,7 @@ export function format_spaces(json, spacing) {
     }
 
 }
-__exports.format_spaces = format_spaces
 
-function __wbindgen_throw(ptr, len) {
-    throw new Error(getStringFromWasm(ptr, len));
-}
-__exports.__wbindgen_throw = __wbindgen_throw
-
-function freeError(ptr) {
-
-    wasm.__wbg_error_free(ptr);
-}
 /**
 */
 export class Error {
@@ -215,15 +201,19 @@ export class Error {
     free() {
         const ptr = this.ptr;
         this.ptr = 0;
-        freeError(ptr);
-    }
 
+        wasm.__wbg_error_free(ptr);
+    }
     /**
     * @returns {number}
     */
     get start() {
         return wasm.__wbg_get_error_start(this.ptr) >>> 0;
     }
+    /**
+    * @param {number} arg0
+    * @returns {void}
+    */
     set start(arg0) {
         return wasm.__wbg_set_error_start(this.ptr, arg0);
     }
@@ -233,14 +223,26 @@ export class Error {
     get end() {
         return wasm.__wbg_get_error_end(this.ptr) >>> 0;
     }
+    /**
+    * @param {number} arg0
+    * @returns {void}
+    */
     set end(arg0) {
         return wasm.__wbg_set_error_end(this.ptr, arg0);
     }
 }
 
 function init(module) {
+    if (typeof module === 'undefined') {
+        module = import.meta.url.replace(/\.js$/, '_bg.wasm');
+    }
     let result;
-    const imports = { './www': __exports };
+    const imports = {};
+    imports.wbg = {};
+    imports.wbg.__wbindgen_throw = function(arg0, arg1) {
+        let varg0 = getStringFromWasm(arg0, arg1);
+        throw new Error(varg0);
+    };
 
     if (module instanceof URL || typeof module === 'string' || module instanceof Request) {
 
