@@ -186,7 +186,11 @@ fn next_token(mut s: &str) -> TokenResult {
     }
 }
 
-fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), (Error, &[TokenRecord])> {
+type MoreToParse<'a> = (Option<Json>, &'a [TokenRecord]);
+type ParseError<'a> = (Error, &'a [TokenRecord]);
+type ParseResult<'a> = Result<MoreToParse<'a>, ParseError<'a>>;
+
+fn next_value(tokens: &[TokenRecord]) -> ParseResult<'_> {
     if let Some(tup) = tokens.split_first() {
         match tup {
             ((Token::Null, _, _), rest) => Ok((Some(Json::Null), rest)),
@@ -226,7 +230,10 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                                         map.insert(key.to_string(), value);
 
                                         match still_more.split_first() {
-                                            Some(((Token::Comma, comma_len, comma_start), please_stop)) => {
+                                            Some((
+                                                (Token::Comma, comma_len, comma_start),
+                                                please_stop,
+                                            )) => {
                                                 last_comma = (comma_len, comma_start);
                                                 rest = please_stop
                                             }
@@ -234,21 +241,38 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                                                 return Ok((Some(Json::Object(map)), please_stop));
                                             }
                                             Some(((_, l, f), more_rest)) => {
-                                                return Err(((ErrorKind::UnexpectedToken, *l, *f), more_rest))
+                                                return Err((
+                                                    (ErrorKind::UnexpectedToken, *l, *f),
+                                                    more_rest,
+                                                ))
                                             }
-                                            None => return Err(((ErrorKind::UnterminatedObject, 0, *f), still_more)),
+                                            None => {
+                                                return Err((
+                                                    (ErrorKind::UnterminatedObject, 0, *f),
+                                                    still_more,
+                                                ))
+                                            }
                                         }
                                     }
                                     Ok((None, still_more)) => {
-                                        return Err(((ErrorKind::UnterminatedObject, 0, *f), still_more));
+                                        return Err((
+                                            (ErrorKind::UnterminatedObject, 0, *f),
+                                            still_more,
+                                        ));
                                     }
                                 }
                             } else {
-                                return Err(((ErrorKind::UnexpectedToken, *token_len, *token_rest), more));
+                                return Err((
+                                    (ErrorKind::UnexpectedToken, *token_len, *token_rest),
+                                    more,
+                                ));
                             }
                         }
                         (Token::CloseCurly, _, _) => {
-                            return Err(((ErrorKind::TrailingComma, *last_comma.0, *last_comma.1), more))
+                            return Err((
+                                (ErrorKind::TrailingComma, *last_comma.0, *last_comma.1),
+                                more,
+                            ))
                         }
                         _ => return Err(((ErrorKind::UnexpectedToken, *tok_len, *tok_rest), rest)),
                     }
@@ -286,7 +310,9 @@ fn next_value(tokens: &[TokenRecord]) -> Result<(Option<Json>, &[TokenRecord]), 
                                 Some(((Token::CloseSquare, _, _), even_more)) => {
                                     return Ok((Some(Json::Array(vec)), even_more))
                                 }
-                                Some(((_, l, f), even_more)) => return Err(((ErrorKind::UnexpectedToken, *l, *f), even_more)),
+                                Some(((_, l, f), even_more)) => {
+                                    return Err(((ErrorKind::UnexpectedToken, *l, *f), even_more))
+                                }
                                 None => return Err(((ErrorKind::UnterminatedArray, 0, *f), more)),
                             }
                         }
