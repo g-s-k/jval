@@ -1,0 +1,38 @@
+.App {
+  padding: 1em 4em;
+  background-color: #282c34;
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: snow;
+}
+
+section {
+  flex: 1;
+}
+
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+}
+
+.controls > span:last-child {
+  float: right;
+}
+
+.controls > span:last-child > *:not(:last-child) {
+  margin-right: 2px;
+}
+
+input[type="number"] {
+  width: 5ch;
+}
+
+.error-message {
+  color: red;
+}
