@@ -69,22 +69,19 @@ if (typeof cachedTextEncoder.encodeInto === 'function') {
 }
 /**
 * @param {string} json
-* @returns {Error | undefined}
+* @returns {Error}
 */
 export function validate(json) {
-    const ptr0 = passStringToWasm(json);
-    const len0 = WASM_VECTOR_LEN;
-    try {
+    const ret = wasm.validate(passStringToWasm(json), WASM_VECTOR_LEN);
+    return ret === 0 ? undefined : Error.__wrap(ret);
+}
 
-        const ptr = wasm.validate(ptr0, len0);
-        return ptr === 0 ? undefined : Error.__wrap(ptr);
-
-
-    } finally {
-        wasm.__wbindgen_free(ptr0, len0 * 1);
-
+let cachegetInt32Memory = null;
+function getInt32Memory() {
+    if (cachegetInt32Memory === null || cachegetInt32Memory.buffer !== wasm.memory.buffer) {
+        cachegetInt32Memory = new Int32Array(wasm.memory.buffer);
     }
-
+    return cachegetInt32Memory;
 }
 
 let cachedTextDecoder = new TextDecoder('utf-8');
@@ -92,46 +89,20 @@ let cachedTextDecoder = new TextDecoder('utf-8');
 function getStringFromWasm(ptr, len) {
     return cachedTextDecoder.decode(getUint8Memory().subarray(ptr, ptr + len));
 }
-
-let cachedGlobalArgumentPtr = null;
-function globalArgumentPtr() {
-    if (cachedGlobalArgumentPtr === null) {
-        cachedGlobalArgumentPtr = wasm.__wbindgen_global_argument_ptr();
-    }
-    return cachedGlobalArgumentPtr;
-}
-
-let cachegetUint32Memory = null;
-function getUint32Memory() {
-    if (cachegetUint32Memory === null || cachegetUint32Memory.buffer !== wasm.memory.buffer) {
-        cachegetUint32Memory = new Uint32Array(wasm.memory.buffer);
-    }
-    return cachegetUint32Memory;
-}
 /**
 * @param {string} json
 * @returns {string}
 */
 export function format_packed(json) {
-    const ptr0 = passStringToWasm(json);
-    const len0 = WASM_VECTOR_LEN;
-    const retptr = globalArgumentPtr();
-    try {
-        wasm.format_packed(retptr, ptr0, len0);
-        const mem = getUint32Memory();
-        const rustptr = mem[retptr / 4];
-        const rustlen = mem[retptr / 4 + 1];
-        if (rustptr === 0) return;
-        const realRet = getStringFromWasm(rustptr, rustlen).slice();
-        wasm.__wbindgen_free(rustptr, rustlen * 1);
-        return realRet;
-
-
-    } finally {
-        wasm.__wbindgen_free(ptr0, len0 * 1);
-
+    const retptr = 8;
+    const ret = wasm.format_packed(retptr, passStringToWasm(json), WASM_VECTOR_LEN);
+    const memi32 = getInt32Memory();
+    let v0;
+    if (memi32[retptr / 4 + 0] !== 0) {
+        v0 = getStringFromWasm(memi32[retptr / 4 + 0], memi32[retptr / 4 + 1]).slice();
+        wasm.__wbindgen_free(memi32[retptr / 4 + 0], memi32[retptr / 4 + 1] * 1);
     }
-
+    return v0;
 }
 
 /**
@@ -139,25 +110,15 @@ export function format_packed(json) {
 * @returns {string}
 */
 export function format_tabs(json) {
-    const ptr0 = passStringToWasm(json);
-    const len0 = WASM_VECTOR_LEN;
-    const retptr = globalArgumentPtr();
-    try {
-        wasm.format_tabs(retptr, ptr0, len0);
-        const mem = getUint32Memory();
-        const rustptr = mem[retptr / 4];
-        const rustlen = mem[retptr / 4 + 1];
-        if (rustptr === 0) return;
-        const realRet = getStringFromWasm(rustptr, rustlen).slice();
-        wasm.__wbindgen_free(rustptr, rustlen * 1);
-        return realRet;
-
-
-    } finally {
-        wasm.__wbindgen_free(ptr0, len0 * 1);
-
+    const retptr = 8;
+    const ret = wasm.format_tabs(retptr, passStringToWasm(json), WASM_VECTOR_LEN);
+    const memi32 = getInt32Memory();
+    let v0;
+    if (memi32[retptr / 4 + 0] !== 0) {
+        v0 = getStringFromWasm(memi32[retptr / 4 + 0], memi32[retptr / 4 + 1]).slice();
+        wasm.__wbindgen_free(memi32[retptr / 4 + 0], memi32[retptr / 4 + 1] * 1);
     }
-
+    return v0;
 }
 
 /**
@@ -166,25 +127,15 @@ export function format_tabs(json) {
 * @returns {string}
 */
 export function format_spaces(json, spacing) {
-    const ptr0 = passStringToWasm(json);
-    const len0 = WASM_VECTOR_LEN;
-    const retptr = globalArgumentPtr();
-    try {
-        wasm.format_spaces(retptr, ptr0, len0, spacing);
-        const mem = getUint32Memory();
-        const rustptr = mem[retptr / 4];
-        const rustlen = mem[retptr / 4 + 1];
-        if (rustptr === 0) return;
-        const realRet = getStringFromWasm(rustptr, rustlen).slice();
-        wasm.__wbindgen_free(rustptr, rustlen * 1);
-        return realRet;
-
-
-    } finally {
-        wasm.__wbindgen_free(ptr0, len0 * 1);
-
+    const retptr = 8;
+    const ret = wasm.format_spaces(retptr, passStringToWasm(json), WASM_VECTOR_LEN, spacing);
+    const memi32 = getInt32Memory();
+    let v0;
+    if (memi32[retptr / 4 + 0] !== 0) {
+        v0 = getStringFromWasm(memi32[retptr / 4 + 0], memi32[retptr / 4 + 1]).slice();
+        wasm.__wbindgen_free(memi32[retptr / 4 + 0], memi32[retptr / 4 + 1] * 1);
     }
-
+    return v0;
 }
 
 /**
@@ -208,27 +159,27 @@ export class Error {
     * @returns {number}
     */
     get start() {
-        return wasm.__wbg_get_error_start(this.ptr) >>> 0;
+        const ret = wasm.__wbg_get_error_start(this.ptr);
+        return ret >>> 0;
     }
     /**
     * @param {number} arg0
-    * @returns {void}
     */
     set start(arg0) {
-        return wasm.__wbg_set_error_start(this.ptr, arg0);
+        wasm.__wbg_set_error_start(this.ptr, arg0);
     }
     /**
     * @returns {number}
     */
     get end() {
-        return wasm.__wbg_get_error_end(this.ptr) >>> 0;
+        const ret = wasm.__wbg_get_error_end(this.ptr);
+        return ret >>> 0;
     }
     /**
     * @param {number} arg0
-    * @returns {void}
     */
     set end(arg0) {
-        return wasm.__wbg_set_error_end(this.ptr, arg0);
+        wasm.__wbg_set_error_end(this.ptr, arg0);
     }
 }
 
@@ -240,19 +191,24 @@ function init(module) {
     const imports = {};
     imports.wbg = {};
     imports.wbg.__wbindgen_throw = function(arg0, arg1) {
-        let varg0 = getStringFromWasm(arg0, arg1);
-        throw new Error(varg0);
+        throw new Error(getStringFromWasm(arg0, arg1));
     };
 
-    if (module instanceof URL || typeof module === 'string' || module instanceof Request) {
+    if ((typeof URL === 'function' && module instanceof URL) || typeof module === 'string' || (typeof Request === 'function' && module instanceof Request)) {
 
         const response = fetch(module);
         if (typeof WebAssembly.instantiateStreaming === 'function') {
             result = WebAssembly.instantiateStreaming(response, imports)
             .catch(e => {
-                console.warn("`WebAssembly.instantiateStreaming` failed. Assuming this is because your server does not serve wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
                 return response
-                .then(r => r.arrayBuffer())
+                .then(r => {
+                    if (r.headers.get('Content-Type') != 'application/wasm') {
+                        console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
+                        return r.arrayBuffer();
+                    } else {
+                        throw e;
+                    }
+                })
                 .then(bytes => WebAssembly.instantiate(bytes, imports));
             });
         } else {
