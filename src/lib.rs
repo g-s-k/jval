@@ -80,7 +80,7 @@ fn try_get_string(s: &str) -> Result<(TokenRecord, &str), Error> {
             d if d.is_ascii_hexdigit() && unic.is_some() => {
                 if let Some(u) = unic.iter_mut().next() {
                     match u.len() {
-                        0...2 => u.push(d),
+                        0..=2 => u.push(d),
                         3 => {
                             u.push(d);
 
@@ -124,16 +124,16 @@ fn try_get_number(s: &str) -> Result<(TokenRecord, &str), Error> {
         state = match (c, state) {
             ('-', Sign) => Sign,
             ('0', Sign) => Point,
-            ('1'...'9', Sign) | ('0'...'9', Whole) => Whole,
-            ('.', Point) | ('.', Whole) | ('0'...'9', Fract) => Fract,
-            ('-', ExpSign) | ('+', ExpSign) | ('0'...'9', Exp) | ('0'...'9', ExpSign) => Exp,
+            ('1'..='9', Sign) | ('0'..='9', Whole) => Whole,
+            ('.', Point) | ('.', Whole) | ('0'..='9', Fract) => Fract,
+            ('-', ExpSign) | ('+', ExpSign) | ('0'..='9', Exp) | ('0'..='9', ExpSign) => Exp,
             ('e', Fract)
             | ('E', Fract)
             | ('e', Point)
             | ('E', Point)
             | ('e', Whole)
             | ('E', Whole) => ExpSign,
-            ('-', _) | ('+', _) | ('0'...'9', _) | ('.', _) | ('e', _) | ('E', _) => {
+            ('-', _) | ('+', _) | ('0'..='9', _) | ('.', _) | ('e', _) | ('E', _) => {
                 return Err((ErrorKind::InvalidNumber, 1, s.len() - i))
             }
             _ => break,
