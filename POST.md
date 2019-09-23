@@ -2,10 +2,11 @@
 
 > Tips for deploying the same functionality on the web, the desktop, and the command line
 
-An aphorism frequently heard in the software industry is "Don't Repeat
-Yourself", and its abbreviation "DRY". While there is hardly a consensus about
-just how much repetition is appropriate, building your core functionality from
-scratch on each platform you want to deploy to is likely too much.
+A popular aphorism in the software industry is "Don't Repeat Yourself" (often
+abbreviated "DRY"). While there is hardly a consensus about just how much
+repetition is appropriate, it is likely that building your core functionality
+from scratch on each platform you want to deploy to is too much from a business
+or engineering perspective.
 
 If your platforms all support the same language or runtime (and you want to use
 that language or runtime), sharing code can be simple. A great example of this
@@ -20,16 +21,16 @@ them.
 If this is not the case, it is still possible to share code between platforms
 using [FFI](https://en.wikipedia.org/wiki/Foreign_function_interface). This is
 frequently done by writing the core library in C or C++ and providing a safe
-wrapper for each platform. While this is generally effective, it is not most
-developers' idea of a good time; it makes debugging painful, slows down
-development cycles, and creates opportunities for many avoidable bugs. However,
-depending on the target platforms, it can provide a performance boost -
+wrapper for each platform. While this is generally effective, it can make
+debugging painful, slow down development cycles, and create opportunities for a
+whole host of avoidable bugs to creep into your product. However, depending on
+the platforms you want to target, it can provide a performance boost -
 especially appreciated for resource-intensive applications like games or media
 editors.
 
-When neither of those options are possible or enticing, there is another
-possibility. You _can_ build for multiple platforms in the same language,
-without sacrificing performance. Let's do it in Rust!
+There is another option - writing your library in a language flexible enough to
+build a whole application in, but with a toolchain that allows you to use FFI on
+platforms that require a specific language or runtime...Rust!
 
 ### Building your shared library
 
@@ -38,14 +39,17 @@ and formatter](https://github.com/g-s-k/jval). The actual functionality is not
 so important, but here are some basic tips on what should and shouldn't go in
 yours:
 
-- Scope your shared library as narrowly as possible. Don't be afraid to
-  split it into several independent crates if there are multiple orthogonal
-  pieces.
+- Scope your shared library as narrowly as possible. Don't be afraid to split it
+  into several independent crates if there are orthogonal, loosely coupled (or
+  even better, completely disjoint) pieces.
 
-- Limit platform-specific code, especially I/O and networking, as much as
-  you can. While Rust does support conditional compilation, it can make code
-  pretty hard to follow when the flow of control is interrupted and reorganized
-  with `#[cfg]`s.
+- Limit platform-specific code, especially I/O and networking, as much as you
+  can. While Rust does support conditional compilation, it can make code pretty
+  hard to follow when the flow of control is interrupted and reorganized with
+  `#[cfg]`s. For example, instead of using the `println!` macro, take a `mut`
+  reference to some type implementing `std::io::Write` and use `writeln!`. Your
+  consumer applications can then pass in a reference to `Stdout`, a `File`, or
+  something else at their discretion.
 
 - Keep your dependency count low. Many libraries are cross-platform, but some
   have limited support or expect certain primitives to exist.
@@ -113,11 +117,11 @@ I/O](https://doc.rust-lang.org/std/io/#bufreader-and-bufwriter).
 The possibilities begin opening up here. There are many established UI
 frameworks for the desktop, and choosing the right one for your application (if
 you build a desktop app at all!) is highly context-dependent. For example, a
-Windows-only application could consider the `winapi` crate, and a MacOS only
-application could consider the `cocoa` crate. Larger, more ambitious projects
-might be interested in `rust-qt`. For our purposes, however, we are going to
-consider `gtk-rs` as GTK+ has the most extensive support in Rust at the time of
-writing.
+Windows-only application could consider the `winapi` or `abscissa` crates, and a
+MacOS-only application could consider the `cocoa` crate. Larger, more ambitious
+projects might be interested in `rust-qt`. For our purposes, however, we are
+going to consider `gtk-rs` as GTK+ has the most extensive support in Rust at the
+time of writing.
 
 One library that caught my eye while researching for this article was
 [relm](https://github.com/antoyo/relm), which is a runtime for `gtk-rs` that
@@ -136,7 +140,7 @@ easy. My only tip for desktop app development is to give them a try.
 
 #### A static web page: take one
 
-One thing you might notice if you explore the example repository is that there
+One thing you might notice while exploring the example repository is that there
 are actually two static site implementations included. At first, I wrote a very
 simple, vanilla JS version to show just how easy it is to integrate WebAssembly
 into a static page. Later on, I added a (mostly) identical one built using
@@ -155,8 +159,7 @@ for inspiration. The high-level control flow is like so:
    automatically generated bindings and initializes the WebAssembly before doing
    its work. Once the WASM is fetched, compiled, and ready to go, it connects
    callbacks and event listeners to the buttons and the textarea to validate the
-   input and display errors. The rest of the functionality is handled by the
-   Rust code in the parent directory.
+   input and display errors.
    
 ##### Ensure that the WebAssembly code is in place before hooking up the UI with a good ol' IIFE
 
@@ -176,6 +179,16 @@ import init, { ... } from "./example.js";
   ...
 })()
 ```
+
+3. In the parent directory (`examples/www/src`) are the FFI bindings for the
+   library. Thanks to
+   [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen), they're pretty
+   minimal. All we needed to define were four functions and a single type, in
+   just over 50 lines of code! There are [some
+   limitations](https://rustwasm.github.io/docs/wasm-bindgen/reference/types.html)
+   on what data types can pass over the FFI boundary, but all that's really
+   needed here are strings, unsigned integers (for character indices), and
+   optional values.
 
 #### A static web page: take two
 
@@ -251,9 +264,9 @@ handle the WASM with a [Context](https://reactjs.org/docs/context.html). The
 downsides of this approach are listed in the React documentation, and some of
 them sound scary. However, Context is a great way to avoid passing props down
 multiple levels and to reduce render overhead. It also lets you isolate your
-implementation of deriving a complex or expensive value (e.g. WASM, a WebSocket
-connection, a large data structure) and give components access to it throughout
-the tree.
+implementation of deriving an expensive or persistent value (e.g. a WASM module,
+a WebSocket connection, a large data structure) and give components access to it
+throughout the tree.
 
 Here is a bare-bones implementation of a Provider that fetches the WASM file and
 lets its children access the functions it defines:
