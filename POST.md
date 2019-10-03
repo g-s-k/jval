@@ -21,12 +21,18 @@ them.
 If this is not the case, it is still possible to share code between platforms
 using [FFI](https://en.wikipedia.org/wiki/Foreign_function_interface). This is
 frequently done by writing the core library in C or C++ and providing a safe
-wrapper for each platform. While this is generally effective, it can make
-debugging painful, slow down development cycles, and create opportunities for a
-whole host of avoidable bugs to creep into your product. However, depending on
-the platforms you want to target, it can provide a performance boost -
-especially appreciated for resource-intensive applications like games or media
-editors.
+wrapper for each platform. For desktop and mobile applications, this would be
+distributed as a dynamically linked library (e.g. a `.dll` file on Windows or a
+`.so` file on Unix-like systems) or statically linked into the binary. For web
+applications, modern browsers support an executable format called WebAssembly
+(WASM), which can expose values and procedures to the JavaScript runtime (and
+vice versa).
+
+While FFI is generally effective, it can make debugging painful, slow down
+development cycles, and create opportunities for a whole host of avoidable bugs
+to creep into your product. However, depending on the platforms you want to
+target, it can provide a performance boost - especially appreciated for
+resource-intensive applications like games or media editors.
 
 There is another option - writing your library in a language flexible enough to
 build a whole application in, but with a toolchain that allows you to use FFI on
